@@ -55,7 +55,7 @@ CHANNEL_ID_LINK_DETECT      = 1400084007449919499    # deteksi link → arahkan 
 CHANNEL_ID_SERVER_SPOTLIGHT = 1426441056613830656    # tujuan announce
 
 # Emoji untuk reaction role
-REACTION_EMOJI = "🔆"
+REACTION_EMOJI = "🎮"
 TZ = ZoneInfo("Asia/Jakarta")
 
 intents = discord.Intents.default()
