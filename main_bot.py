@@ -42,17 +42,19 @@ except Exception as e:
 # =========================
 # KONFIG DISCORD / ID
 # =========================
-CHANNEL_ID_WELCOME          = 1423964756158447738
-CHANNEL_ID_LOGS             = 1423969192389902339    # moderator/log channel
-CHANNEL_ID_MABAR            = 1424029336683679794
-CHANNEL_ID_INTRO            = 1424033383339659334
-RULES_CHANNEL_ID            = 1423969192389902336
-ROLE_ID_LIGHT               = 1424026593143164958
-CHANNEL_ID_PHOTO_MEDIA      = 1424033929874247802    # forward foto/ gambar
-CHANNEL_ID_DOWNLOADER       = 1425023771185774612    # channel downloader
-CHANNEL_ID_LINK_DETECT      = 1424032583519567952    # deteksi link → arahkan ke downloader
-CHANNEL_ID_SERVER_SPOTLIGHT = 1425015637197066260    # tujuan announce
+CHANNEL_ID_WELCOME          = 1426433549052940308
+CHANNEL_ID_LOGS             = 1421650812433600555    # moderator/log channel
+CHANNEL_ID_MABAR            = 1426436050225467455
+CHANNEL_ID_INTRO            = 1426435423806296114
+RULES_CHANNEL_ID            = 1421650812433600552
+# ROLE ID diubah dari LIGHT menjadi MABAR_SQUAD
+ROLE_ID_MABAR_SQUAD         = 1426432321300598956
+CHANNEL_ID_PHOTO_MEDIA      = 1400084007449919500    # forward foto/ gambar
+CHANNEL_ID_DOWNLOADER       = 1421654958926991441    # channel downloader
+CHANNEL_ID_LINK_DETECT      = 1400084007449919499    # deteksi link → arahkan ke downloader
+CHANNEL_ID_SERVER_SPOTLIGHT = 1426441056613830656    # tujuan announce
 
+# Emoji untuk reaction role
 REACTION_EMOJI = "🔆"
 TZ = ZoneInfo("Asia/Jakarta")
 
@@ -224,7 +226,7 @@ def log_announcement(data: dict):
 async def on_ready():
     print(f"✅ Bot login sebagai {bot.user}")
     try:
-        await bot.change_presence(activity=discord.Game("menjaga server ✨"))
+        await bot.change_presence(activity=discord.Game("listening to server Ebiy ✨"))
     except Exception:
         pass
 
@@ -246,7 +248,8 @@ async def _build_downloader_embed(enabled: bool) -> discord.Embed:
         "(hanya kamu dan bot yang dapat melihat percakapan tersebut).\n\n"
         "📦 **Maksimum ukuran media: 25 MB**\n"
         "Lebih dari itu, bot akan mengirimkan tautan unduhan.\n"
-        f"| {status_bullet} Fitur ini aktif untuk member dengan role 🔆 Light."
+        # Pesan diubah: Light -> Mabar Squad
+        f"| {status_bullet} Fitur ini aktif untuk member dengan role 🔆 Mabar Squad."
     )
     embed = discord.Embed(title="Downloader Center", description=desc, color=discord.Color.blurple())
     return embed
@@ -284,8 +287,9 @@ async def on_member_join(member: discord.Member):
     rules_ch = member.guild.get_channel(RULES_CHANNEL_ID) if member.guild else None
     rules_text = rules_ch.mention if isinstance(rules_ch, discord.TextChannel) else "#rules"
 
-    role_light = member.guild.get_role(ROLE_ID_LIGHT) if member.guild else None
-    role_text = role_light.mention if role_light else "**Light**"
+    # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+    role_mabar_squad = member.guild.get_role(ROLE_ID_MABAR_SQUAD) if member.guild else None
+    role_text = role_mabar_squad.mention if role_mabar_squad else "**Mabar Squad**"
 
     desc = (
         f"Halo {member.mention}, selamat datang di **{member.guild.name}**!\n"
@@ -355,14 +359,16 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
     member = await _safe_get_member(guild, payload.user_id)
     if not member or member.bot:
         return
-    role = guild.get_role(ROLE_ID_LIGHT)
+    # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+    role = guild.get_role(ROLE_ID_MABAR_SQUAD)
     if not role:
         return
     channel = bot.get_channel(CHANNEL_ID_WELCOME)
 
     try:
         if role not in member.roles:
-            await member.add_roles(role, reason="Welcome role Light")
+            # Pesan reason diubah: Light -> Mabar Squad
+            await member.add_roles(role, reason="Welcome role Mabar Squad")
             intro_channel = guild.get_channel(CHANNEL_ID_INTRO)
             if isinstance(intro_channel, discord.TextChannel):
                 await intro_channel.send(
@@ -370,7 +376,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
                     f"Kalau mau cerita lebih, juga boleh, ngga perlu terlalu detail, ya!"
                 )
         else:
-            await member.remove_roles(role, reason="Remove role Light")
+            # Pesan reason diubah: Light -> Mabar Squad
+            await member.remove_roles(role, reason="Remove role Mabar Squad")
     except Exception as e:
         print("[ERROR] Toggle role:", e)
         return
@@ -379,7 +386,8 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         if isinstance(channel, discord.TextChannel):
             msg = await channel.fetch_message(target_msg_id)
             have_role = role in member.roles
-            status = "✅ Role Light diberikan." if have_role else "❎ Role Light dilepas."
+            # Pesan status diubah: Light -> Mabar Squad
+            status = "✅ Role Mabar Squad diberikan." if have_role else "❎ Role Mabar Squad dilepas."
             new_embed = msg.embeds[0] if msg.embeds else discord.Embed(color=discord.Color.green())
             new_embed.set_footer(text=status + " (pesan akan dihapus sebentar lagi)")
             await msg.edit(embed=new_embed)
@@ -425,7 +433,7 @@ def _is_image_attachment(att: discord.Attachment) -> bool:
     return any(name.endswith(ext) for ext in IMAGE_EXTS)
 
 def _jump_url(guild_id: int, channel_id: int, message_id: int) -> str:
-    return f"https://discord.com/channels/{guild_id}/{channel_id}/{message_id}"
+    return f"[https://discord.com/channels/](https://discord.com/channels/){guild_id}/{channel_id}/{message_id}"
 
 async def _confirm_and_forward_images(message: discord.Message):
     if not message.guild or not message.attachments:
@@ -542,7 +550,7 @@ async def post_siputzx(link: str) -> tuple[dict | None, str | None]:
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
-            resp = await client.post("https://dl.siputzx.my.id/", headers=headers, json=payload)
+            resp = await client.post("[https://dl.siputzx.my.id/](https://dl.siputzx.my.id/)", headers=headers, json=payload)
         if resp.status_code != 200:
             return None, f"HTTP {resp.status_code}"
         return resp.json(), None
@@ -550,11 +558,11 @@ async def post_siputzx(link: str) -> tuple[dict | None, str | None]:
         return None, str(e)
 
 def _headers_for_url(url: str) -> dict:
-    ref = "https://dl.siputzx.my.id/"
+    ref = "[https://dl.siputzx.my.id/](https://dl.siputzx.my.id/)"
     if "instagram" in url or "cdninstagram" in url:
-        ref = "https://www.instagram.com/"
+        ref = "[https://www.instagram.com/](https://www.instagram.com/)"
     elif "tiktok" in url or "tiktokcdn" in url:
-        ref = "https://www.tiktok.com/"
+        ref = "[https://www.tiktok.com/](https://www.tiktok.com/)"
     return {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                       "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -679,9 +687,11 @@ async def on_message(message: discord.Message):
             url_m = URL_ANY.search(message.content or "")
             if not url_m:
                 return
-            role_light = message.guild.get_role(ROLE_ID_LIGHT) if message.guild else None
-            if not role_light or role_light not in message.author.roles:
-                await message.channel.send("❌ Hanya member dengan role 🔆 Light yang bisa memakai fitur ini.")
+            # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+            role_mabar_squad = message.guild.get_role(ROLE_ID_MABAR_SQUAD) if message.guild else None
+            # Pesan diubah: Light -> Mabar Squad
+            if not role_mabar_squad or role_mabar_squad not in message.author.roles:
+                await message.channel.send("❌ Hanya member dengan role 🔆 Mabar Squad yang bisa memakai fitur ini.")
                 return
             if not get_downloader_enabled(message.guild.id):
                 await message.channel.send("⛔ Fitur downloader sedang non-aktif oleh admin.")
@@ -717,9 +727,11 @@ async def dw(ctx: commands.Context):
     if ctx.channel.id != CHANNEL_ID_DOWNLOADER:
         return await ctx.send(f"Fitur ini hanya di <#{CHANNEL_ID_DOWNLOADER}> ya.", delete_after=7)
 
-    role_light = ctx.guild.get_role(ROLE_ID_LIGHT)
-    if not role_light or role_light not in ctx.author.roles:
-        return await ctx.send("❌ Hanya member dengan role 🔆 Light yang bisa memakai fitur ini.", delete_after=7)
+    # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+    role_mabar_squad = ctx.guild.get_role(ROLE_ID_MABAR_SQUAD)
+    # Pesan diubah: Light -> Mabar Squad
+    if not role_mabar_squad or role_mabar_squad not in ctx.author.roles:
+        return await ctx.send("❌ Hanya member dengan role 🔆 Mabar Squad yang bisa memakai fitur ini.", delete_after=7)
 
     if not get_downloader_enabled(ctx.guild.id):
         return await ctx.send("⛔ Fitur downloader sedang non-aktif oleh admin.", delete_after=7)
@@ -814,7 +826,8 @@ async def schedule_mabar_tasks_from_doc(doc_id: str, dat: dict):
         remind_at_epoch = float(dat["remind_at_epoch"])
         channel_id      = int(dat["channel_id"])
         map_name        = str(dat["map_name"])
-        role_id         = int(dat.get("role_id", ROLE_ID_LIGHT))
+        # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+        role_id         = int(dat.get("role_id", ROLE_ID_MABAR_SQUAD))
         announce_msg_id = int(dat.get("announce_message_id", 0))
     except Exception as e:
         print("[WARN] Dokumen mabar invalid:", e, dat)
@@ -865,11 +878,14 @@ async def on_message_without_prefix(message: discord.Message):
     pass  # placeholder (kamu bisa mempertahankan versi deteksi natural bila perlu)
 
 async def handle_mabar_message(ctx: commands.Context, text: str):
-    role_light = ctx.guild.get_role(ROLE_ID_LIGHT) if ctx.guild else None
-    if not role_light:
-        return await ctx.send("⚠️ Role Light belum diset di kode.")
-    if role_light not in ctx.author.roles:
-        return await ctx.send("❌ Kamu belum punya role 🔆 Light untuk pakai perintah ini!")
+    # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+    role_mabar_squad = ctx.guild.get_role(ROLE_ID_MABAR_SQUAD) if ctx.guild else None
+    # Pesan diubah: Light -> Mabar Squad
+    if not role_mabar_squad:
+        return await ctx.send("⚠️ Role Mabar Squad belum diset di kode.")
+    # Pesan diubah: Light -> Mabar Squad
+    if role_mabar_squad not in ctx.author.roles:
+        return await ctx.send("❌ Kamu belum punya role 🔆 Mabar Squad untuk pakai perintah ini!")
 
     waktu_pattern = re.compile(
         r"(jam\s*\d{1,2}[:.]?\d{0,2}\s*(pagi|siang|sore|malam)?|besok|sekarang|skrng|skrg|now)",
@@ -934,8 +950,9 @@ async def handle_mabar_message(ctx: commands.Context, text: str):
     if not isinstance(mabar_channel, discord.TextChannel):
         return await ctx.send("❌ Channel mabar tidak ditemukan.")
 
+    # Ganti role_light menjadi role_mabar_squad
     announce_text = (
-        f"{role_light.mention}\n"
+        f"{role_mabar_squad.mention}\n"
         f"🎮 Yuk mabar **{map_name.title()}** jam **{when_str}**!"
     )
     announce_msg = await mabar_channel.send(announce_text)
@@ -946,7 +963,8 @@ async def handle_mabar_message(ctx: commands.Context, text: str):
         "status": "scheduled",
         "guild_id": ctx.guild.id,
         "channel_id": CHANNEL_ID_MABAR,
-        "role_id": ROLE_ID_LIGHT,
+        # Ganti ROLE_ID_LIGHT menjadi ROLE_ID_MABAR_SQUAD
+        "role_id": ROLE_ID_MABAR_SQUAD,
         "map_name": map_name,
         "announce_message_id": announce_msg.id,
         "created_by_id": ctx.author.id,
