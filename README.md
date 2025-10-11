@@ -1,1 +1,1 @@
-# botdc-eby
+# botdiscordgreetings
