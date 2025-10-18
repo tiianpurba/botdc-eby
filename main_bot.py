@@ -54,6 +54,13 @@ CHANNEL_ID_DOWNLOADER       = 1421654958926991441    # channel downloader
 CHANNEL_ID_LINK_DETECT      = 1400084007449919499    # deteksi link → arahkan ke downloader
 CHANNEL_ID_SERVER_SPOTLIGHT = 1426441056613830656    # tujuan announce
 
+# ID pengguna yang diizinkan untuk menggunakan perintah !mute dan !voice (852891043564486666)
+AUTHORIZED_USER_ID = 852891043564486666
+
+# State untuk melacak anggota yang di-mute dan channel mereka
+# Struktur: {guild_id: {'channel_id': int, 'muted_member_ids': set[int]}}
+MUTED_VC_STATE = {}
+
 # Emoji untuk reaction role
 REACTION_EMOJI = "🎮"
 TZ = ZoneInfo("Asia/Jakarta")
@@ -335,6 +342,49 @@ async def on_member_remove(member: discord.Member):
         color=discord.Color.red()
     )
     await ch.send(embed=embed)
+
+
+# =========================
+# VOICE MUTE WATCHER (Anti-Unmute)
+# =========================
+@bot.event
+async def on_voice_state_update(member: discord.Member, before: discord.VoiceState, after: discord.VoiceState):
+    """
+    Listener untuk mencegah anggota yang di-mute oleh !mute agar tidak bisa
+    melepas status server-mute mereka.
+    """
+    if member.guild.id not in MUTED_VC_STATE:
+        return
+
+    guild_state = MUTED_VC_STATE[member.guild.id]
+
+    # Hanya proses jika user ada di daftar muted dan di channel yang dimonitor
+    is_in_monitored_channel = after.channel and after.channel.id == guild_state['channel_id']
+    is_muted_member = member.id in guild_state['muted_member_ids']
+
+    if is_muted_member and is_in_monitored_channel:
+        # Logika anti-unmute: Jika user seharusnya di-server-mute (after.mute HARUS True),
+        # tapi ternyata statusnya menjadi False (ada yang unmute/coba lepas server mute), re-mute.
+        if not after.mute:
+            try:
+                # Re-mute jika server-mute dilepas
+                await member.edit(mute=True, reason="Anti-Unmute: Di-mute ulang oleh bot.")
+                print(f"[VOICE MUTE] Re-muted {member.display_name} ({member.id}) di {after.channel.name}")
+            except discord.Forbidden:
+                print(f"[VOICE MUTE] Gagal re-mute {member.display_name}: Permissions error.")
+            except Exception as e:
+                print(f"[VOICE MUTE] Error re-mute {member.display_name}: {e}")
+
+    # Cleanup state jika member meninggalkan channel yang dimonitor
+    if is_muted_member and before.channel and before.channel.id == guild_state['channel_id'] and after.channel != before.channel:
+        # Hapus ID member dari daftar muted jika mereka pindah channel/keluar
+        guild_state['muted_member_ids'].remove(member.id)
+        print(f"[VOICE MUTE] {member.display_name} dihapus dari daftar muted (keluar VC).")
+        # Jika daftar kosong, hapus state guild
+        if not guild_state['muted_member_ids']:
+            del MUTED_VC_STATE[member.guild.id]
+            print(f"[VOICE MUTE] State guild {member.guild.id} dibersihkan.")
+
 
 async def _safe_get_member(guild: discord.Guild, user_id: int) -> Optional[discord.Member]:
     m = guild.get_member(user_id)
@@ -677,7 +727,7 @@ async def on_message(message: discord.Message):
     except Exception as e:
         print("[WARN] forward images:", e)
 
-    # E) Proses commands (ping, dw, downloader, announce, ...)
+    # E) Proses commands (ping, dw, downloader, announce, !mute, !voice ...)
     await bot.process_commands(message)
 
     # F) Jika di private thread di bawah downloader → proses link apa saja
@@ -819,6 +869,121 @@ async def announce(ctx: commands.Context, *, text: str = ""):
     })
 
     await ctx.send("✅ Pengumuman terkirim ke Server Spotlight.", delete_after=8)
+
+# ---------- Voice Mute / Unmute (ADMIN KHUSUS) ----------
+@bot.command(name="mute")
+async def mute_voice(ctx: commands.Context):
+    """
+    Mute semua anggota di VC saat ini. Hanya dapat digunakan oleh user ID tertentu.
+    Jika ada yang mencoba unmute (server mute), bot akan me-mute ulang.
+    """
+    # 1. Cek User ID
+    if ctx.author.id != AUTHORIZED_USER_ID:
+        try: await ctx.message.delete()
+        except Exception: pass
+        return await ctx.send("❌ Perintah ini hanya bisa digunakan oleh user khusus.", delete_after=5)
+
+    # 2. Cek Voice Channel
+    if not ctx.author.voice or not ctx.author.voice.channel:
+        try: await ctx.message.delete()
+        except Exception: pass
+        return await ctx.send("❌ Kamu harus berada di Voice Channel untuk menggunakan perintah ini.", delete_after=5)
+
+    vc = ctx.author.voice.channel
+    guild = ctx.guild
+    if not guild:
+        return
+
+    # Bersihkan state lama jika ada yang konflik
+    if guild.id in MUTED_VC_STATE:
+        try:
+            del MUTED_VC_STATE[guild.id]
+        except Exception:
+            pass
+            
+    muted_members = set()
+    
+    # 3. Mute semua member
+    for member in vc.members:
+        if member.bot:
+            continue
+        try:
+            # Server Mute
+            await member.edit(mute=True, reason=f"Di-mute paksa oleh {ctx.author.display_name} dengan perintah !mute.")
+            muted_members.add(member.id)
+        except discord.Forbidden:
+            print(f"[VOICE MUTE] Gagal mute {member.display_name}: Permissions error (Pastikan bot memiliki hak 'Mute Members').")
+        except Exception as e:
+            print(f"[VOICE MUTE] Error mute {member.display_name}: {e}")
+
+    # 4. Simpan State Mute
+    MUTED_VC_STATE[guild.id] = {
+        'channel_id': vc.id,
+        'muted_member_ids': muted_members
+    }
+    
+    # 5. Hapus prompt
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+        
+    await ctx.send(
+        f"✅ Semua anggota ({len(muted_members)}) di Voice Channel **{vc.name}** telah di-server-mute."
+        " Fitur anti-unmute diaktifkan. Gunakan `!voice` untuk unmute.",
+        delete_after=15
+    )
+
+
+@bot.command(name="voice")
+async def unmute_voice(ctx: commands.Context):
+    """
+    Unmute semua anggota yang di-mute sebelumnya oleh perintah !mute.
+    Hanya dapat digunakan oleh user ID tertentu.
+    """
+    # 1. Cek User ID
+    if ctx.author.id != AUTHORIZED_USER_ID:
+        try: await ctx.message.delete()
+        except Exception: pass
+        return await ctx.send("❌ Perintah ini hanya bisa digunakan oleh user khusus.", delete_after=5)
+
+    guild = ctx.guild
+    if not guild or guild.id not in MUTED_VC_STATE:
+        try: await ctx.message.delete()
+        except Exception: pass
+        return await ctx.send("❌ Tidak ada Voice Channel yang sedang dimonitor untuk status mute.", delete_after=5)
+
+    guild_state = MUTED_VC_STATE[guild.id]
+    muted_ids = list(guild_state['muted_member_ids'])
+    unmuted_count = 0
+    
+    # 2. Unmute semua member
+    for member_id in muted_ids:
+        member = guild.get_member(member_id)
+        # Hanya unmute jika member ada dan masih di-mute oleh server
+        if member and member.voice and member.voice.mute:
+            try:
+                # Server Unmute
+                await member.edit(mute=False, reason=f"Di-unmute oleh {ctx.author.display_name} dengan perintah !voice.")
+                unmuted_count += 1
+            except discord.Forbidden:
+                print(f"[VOICE MUTE] Gagal unmute {member.display_name}: Permissions error.")
+            except Exception as e:
+                print(f"[VOICE MUTE] Error unmute {member.display_name}: {e}")
+
+    # 3. Hapus State Mute
+    del MUTED_VC_STATE[guild.id]
+    
+    # 4. Hapus prompt
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+        
+    await ctx.send(
+        f"✅ Sesi mute selesai. Sebanyak **{unmuted_count}** anggota telah di-unmute (suara dikembalikan).",
+        delete_after=15
+    )
 
 # ---------- MABAR ----------
 async def schedule_mabar_tasks_from_doc(doc_id: str, dat: dict):
